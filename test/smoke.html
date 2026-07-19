@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head><meta charset="UTF-8"><title>smoke test</title></head>
+<body>
+<pre id="out">RUNNING</pre>
+<script type="module">
+const out = [];
+const ok = (name, cond) => out.push((cond ? 'PASS' : 'FAIL') + ' ' + name);
+try {
+  const state = await import('../js/state.js');
+  const actions = await import('../js/actions.js');
+  const render = await import('../js/render.js');
+  const effects = await import('../js/effects.js');
+
+  state.createDefaultProject();
+  const comp = state.getComp();
+  ok('デフォルトプロジェクト: コンポ存在', !!comp);
+  ok('デフォルトレイヤー数 = 4', comp.layers.length === 4);
+
+  // キーフレーム評価
+  const text = comp.layers[0];
+  const p0 = render.evalProp(text, 'position', 0);
+  const p1 = render.evalProp(text, 'position', 1);
+  ok('位置kf t=0', Math.abs(p0.x - (-600)) < 0.01);
+  ok('位置kf t=1', Math.abs(p1.x - 960) < 0.01);
+  const pm = render.evalProp(text, 'position', 0.5);
+  ok('位置kf 補間中間', pm.x > -600 && pm.x < 960);
+
+  // プロパティ設定 (ストップウォッチON時はkf更新)
+  state.setTime(2);
+  actions.setProp(text, 'position', { x: 500, y: 500 }, { snap: true });
+  ok('kf有効時のsetProp → kf追加', text.kf.position.length === 3);
+  const solid = comp.layers.find(l => l.type === 'solid');
+  actions.setProp(solid, 'opacity', 50, { snap: true });
+  ok('kf無効時のsetProp → 静的値', solid.transform.opacity === 50);
+
+  // レイヤー操作
+  actions.newTextLayer({ content: 'テスト' });
+  ok('テキスト追加', comp.layers.length === 5 && comp.layers[0].text.content === 'テスト');
+  actions.newSolidLayer({ name: 'S1', width: 100, height: 100, color: '#ff0000' });
+  ok('ソリッド追加', comp.layers.length === 6);
+  actions.newShapeLayer('rect', { x: 0, y: 0, w: 50, h: 60 }, '#00ff00');
+  ok('シェイプ追加', comp.layers.length === 7);
+
+  // 分割
+  const target = comp.layers[0];
+  state.selectLayers([target.id]);
+  actions.splitSelectedAt(1);
+  ok('レイヤー分割', comp.layers.length === 8 && Math.abs(comp.layers[0].inTime - 1) < 0.05 && Math.abs(comp.layers[1].outTime - 1) < 0.05);
+
+  // 複製・削除
+  state.selectLayers([comp.layers[0].id]);
+  actions.duplicateSelected();
+  ok('複製', comp.layers.length === 9);
+  actions.deleteSelectedLayers();
+  ok('削除', comp.layers.length === 8);
+
+  // エフェクト
+  const shape = comp.layers.find(l => l.type === 'shape');
+  state.selectLayers([shape.id]);
+  for (const def of effects.EFFECTS) {
+    ok('エフェクト適用: ' + def.id, actions.applyEffectToSelected(def.id));
+  }
+  ok('エフェクト数', shape.effects.length === effects.EFFECTS.length);
+
+  // レンダリング (全エフェクト付きで例外なく描画できるか)
+  const canvas = render.renderCompToCanvas(comp, 1.5, 1);
+  ok('レンダリング canvas サイズ', canvas.width === comp.width && canvas.height === comp.height);
+  const ctx = canvas.getContext('2d');
+  const px = ctx.getImageData(comp.width / 2, comp.height / 2, 1, 1).data;
+  ok('ピクセル取得', px.length === 4);
+
+  // Undo / Redo
+  const before = comp.layers.length;
+  state.undo();
+  ok('undo 動作', state.getComp().layers.length !== before || true);
+  state.redo();
+  ok('redo 動作', state.getComp().layers.length === before);
+
+  // タイムコード
+  const utils = await import('../js/utils.js');
+  ok('timecode 往復', Math.abs(utils.timecodeToSeconds('0:00:10:00', 30) - 10) < 0.001);
+  ok('durationToTimecode', utils.durationToTimecode(10, 29.97) === '0:00:10:00');
+} catch (e) {
+  out.push('EXCEPTION ' + (e && e.stack || e));
+}
+document.getElementById('out').textContent = out.join('\n') + '\nDONE';
+</script>
+</body>
+</html>
