@@ -430,16 +430,29 @@ export function initTimeline(container, titleEl) {
           document.querySelectorAll('.ctx-menu').forEach(m => m.remove());
           item.cmd();
         });
-        if (item.submenu) {
+        {
+          let subTimer = null;
           row.addEventListener('mouseenter', () => {
-            document.querySelectorAll('.menu-dropdown.sub').forEach(d => d.remove());
-            const sub = el('div', { class: 'menu-dropdown sub ctx-menu' });
-            build(item.submenu, sub);
-            const r = row.getBoundingClientRect();
-            sub.style.left = (r.right - 2) + 'px';
-            sub.style.top = (r.top - 3) + 'px';
-            document.body.append(sub);
+            clearTimeout(subTimer);
+            // 自分のサブメニュー・祖先のサブメニューは閉じない (自己破壊防止)
+            const foreign = [...document.querySelectorAll('.menu-dropdown.sub')].filter(d => d !== row._sub && !d.contains(row));
+            if (!item.submenu) {
+              if (foreign.length) subTimer = setTimeout(() => foreign.forEach(d => d.remove()), 300);
+              return;
+            }
+            subTimer = setTimeout(() => {
+              foreign.forEach(d => d.remove());
+              if (row._sub && row._sub.isConnected) return;
+              const sub = el('div', { class: 'menu-dropdown sub ctx-menu' });
+              build(item.submenu, sub);
+              const r = row.getBoundingClientRect();
+              sub.style.left = (r.right - 2) + 'px';
+              sub.style.top = Math.max(0, Math.min(r.top - 3, window.innerHeight - item.submenu.length * 24 - 10)) + 'px';
+              document.body.append(sub);
+              row._sub = sub;
+            }, foreign.length ? 300 : 80);
           });
+          row.addEventListener('mouseleave', () => clearTimeout(subTimer));
         }
         parent.append(row);
       }

@@ -108,16 +108,24 @@ function buildItem(item) {
   );
   let subTimer = null;
   row.addEventListener('mouseenter', () => {
-    document.querySelectorAll('.menu-dropdown.sub').forEach(d => d.remove());
-    if (!item.submenu || !enabled) return;
+    clearTimeout(subTimer);
+    // 自分のサブメニュー・祖先のサブメニューは閉じない (自己破壊防止)
+    const foreign = [...document.querySelectorAll('.menu-dropdown.sub')].filter(d => d !== row._sub && !d.contains(row));
+    if (!item.submenu || !enabled) {
+      // サブメニューを持たない行: 開いている他サブメニューは遅れて閉じる (斜め移動で消える対策)
+      if (foreign.length) subTimer = setTimeout(() => foreign.forEach(d => d.remove()), 300);
+      return;
+    }
     subTimer = setTimeout(() => {
+      foreign.forEach(d => d.remove());
+      if (row._sub && row._sub.isConnected) return;
       const sub = buildDropdown(item.submenu, true);
       const r = row.getBoundingClientRect();
       sub.style.left = (r.right - 2) + 'px';
-      sub.style.top = (r.top - 3) + 'px';
+      sub.style.top = Math.max(0, Math.min(r.top - 3, window.innerHeight - item.submenu.length * 24 - 10)) + 'px';
       document.body.append(sub);
       row._sub = sub;
-    }, 60);
+    }, foreign.length ? 300 : 80);
   });
   row.addEventListener('mouseleave', () => clearTimeout(subTimer));
   row.addEventListener('click', e => {
