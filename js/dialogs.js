@@ -5,7 +5,14 @@ import * as actions from './actions.js';
 
 // ---- 基本モーダル ----
 export function openModal(title, bodyBuilder, { onOk, okLabel = 'OK', width = 380 } = {}) {
-  const close = () => overlay.remove();
+  const onKey = e => {
+    if (e.key === 'Escape') { e.stopPropagation(); close(); }
+    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { e.preventDefault(); if (onOk && onOk() === false) return; close(); }
+  };
+  const close = () => {
+    document.removeEventListener('keydown', onKey, true);
+    overlay.remove();
+  };
   const btnOk = el('button', { class: 'dlg-btn primary', text: okLabel, on: { click: () => { if (onOk && onOk() === false) return; close(); } } });
   const btnCancel = el('button', { class: 'dlg-btn', text: 'キャンセル', on: { click: close } });
   const body = el('div', { class: 'dlg-body' });
@@ -17,10 +24,7 @@ export function openModal(title, bodyBuilder, { onOk, okLabel = 'OK', width = 38
   );
   const overlay = el('div', { class: 'dlg-overlay', on: { mousedown: e => { if (e.target === overlay) close(); } } }, dlg);
   document.body.append(overlay);
-  dlg.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { e.stopPropagation(); close(); }
-    if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'BUTTON') { e.preventDefault(); if (onOk && onOk() === false) return; close(); }
-  });
+  document.addEventListener('keydown', onKey, true);
   const first = dlg.querySelector('input, select, textarea');
   if (first) { first.focus(); first.select?.(); }
   return close;

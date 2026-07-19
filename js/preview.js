@@ -7,8 +7,7 @@ let playing = false;
 let loopEnabled = true;
 let rafId = null;
 let lastTs = 0;
-let playFrom = 0;
-let playStartedAt = 0;
+let playheadFloat = 0; // 非量子化の再生位置 (量子化は表示時のみ)
 
 export function isPlaying() { return playing; }
 
@@ -27,10 +26,9 @@ export function startPlayback() {
   if (!comp || playing) return;
   playing = true;
   state.playing = true;
-  playFrom = state.currentTime;
-  if (playFrom >= comp.workArea.end - 1e-6 || playFrom < comp.workArea.start) playFrom = comp.workArea.start;
-  playStartedAt = performance.now();
-  lastTs = playStartedAt;
+  playheadFloat = state.currentTime;
+  if (playheadFloat >= comp.workArea.end - 1e-6 || playheadFloat < comp.workArea.start) playheadFloat = comp.workArea.start;
+  lastTs = performance.now();
   document.querySelectorAll('.pv-play').forEach(b => b.classList.add('active'));
   emit('playback');
   rafId = requestAnimationFrame(tick);
@@ -47,14 +45,16 @@ function tick(ts) {
   if (!comp) { stopPlayback(); return; }
   const dt = (ts - lastTs) / 1000;
   lastTs = ts;
-  let t = state.currentTime + dt;
-  // フレーム単位に量子化
-  t = Math.floor(t * comp.fps) / comp.fps;
-  if (t >= comp.workArea.end) {
-    if (loopEnabled) t = comp.workArea.start;
+  // 外部からのシーク (ルーラースクラブ/フレームステップ等) を反映
+  if (Math.abs(state.currentTime - playheadFloat) > 0.15) playheadFloat = state.currentTime;
+  playheadFloat += dt;
+  if (playheadFloat >= comp.workArea.end) {
+    if (loopEnabled) playheadFloat = comp.workArea.start;
     else { setTime(comp.workArea.end - 1 / comp.fps); stopPlayback(); return; }
   }
-  setTime(t);
+  // 表示はフレーム単位に量子化 (同じフレームなら再描画しない)
+  const q = Math.floor(playheadFloat * comp.fps) / comp.fps;
+  if (q !== state.currentTime) setTime(q);
   rafId = requestAnimationFrame(tick);
 }
 

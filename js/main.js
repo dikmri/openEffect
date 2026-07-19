@@ -71,24 +71,34 @@ const tlTitle = el('span');
 const tlPanel = panelFrame(['タイムライン']);
 tlPanel.tabBtns[0].replaceWith(el('span', { class: 'panel-tab active dynamic' }, tlTitle));
 
-// スプリッター
+// スプリッター (Pointer Capture で確実にドラッグ終了を捕捉)
+let activeSplitter = null;
 function splitter(dir, onDrag) {
   const s = el('div', { class: 'splitter ' + dir });
-  s.addEventListener('mousedown', e => {
+  s.addEventListener('pointerdown', e => {
     e.preventDefault();
+    activeSplitter = s;
+    s.setPointerCapture(e.pointerId);
     const startX = e.clientX, startY = e.clientY;
     const onMove = ev => onDrag(ev.clientX - startX, ev.clientY - startY, ev);
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+    const onEnd = () => {
+      s.removeEventListener('pointermove', onMove);
+      s.removeEventListener('pointerup', onEnd);
+      s.removeEventListener('pointercancel', onEnd);
+      activeSplitter = null;
       document.body.classList.remove('resizing');
     };
     document.body.classList.add('resizing');
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    s.addEventListener('pointermove', onMove);
+    s.addEventListener('pointerup', onEnd);
+    s.addEventListener('pointercancel', onEnd);
   });
   return s;
 }
+// 安全策: ドラッグ中でないのに resizing クラスが残っていたら解除
+document.addEventListener('pointerdown', () => {
+  if (!activeSplitter) document.body.classList.remove('resizing');
+}, true);
 
 const spLeft = splitter('v', (dx, dy, ev) => {
   const w = colLeft.getBoundingClientRect().width;
@@ -201,6 +211,9 @@ document.addEventListener('keydown', e => {
 // URL パラメータで初期時間指定 (動作確認用): ?t=1.5
 const initT = parseFloat(new URLSearchParams(location.search).get('t'));
 if (!isNaN(initT)) setTime(initT);
+
+// デバッグ/自動テスト用ハンドル
+window.openEffect = { state, getComp, setTime };
 
 // 初期描画
 emitAll();
